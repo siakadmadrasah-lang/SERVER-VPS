@@ -1,0 +1,8 @@
+{
+  "name": "Remix VelaVPS Manager - Cloud \u0026 VPS Orchestration Panel",
+  "description": "Aplikasi manajemen VPS lengkap: instal ulang sistem operasi (OS reinstall), instalasi aplikasi \u0026 runtime 1-klik, konfigurasi firewall, web server, cron job, dan web terminal SSH.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
