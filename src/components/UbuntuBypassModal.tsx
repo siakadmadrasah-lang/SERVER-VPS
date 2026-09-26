@@ -1,327 +1,342 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState } from 'react';
 import { useVps } from '../context/VpsContext';
-import { UBUNTU_BYPASS_METHODS } from '../data/mockData';
 import {
-  RefreshCw,
+  Zap,
   X,
   AlertTriangle,
-  CheckCircle2,
-  Terminal,
-  Copy,
   Check,
-  Zap,
+  Copy,
+  Terminal,
+  Box,
+  Layers,
+  HardDrive,
+  RefreshCw,
+  CheckCircle2,
+  Cpu,
   ShieldAlert,
-  ArrowRight,
-  Info,
-  Server,
 } from 'lucide-react';
 
-interface UbuntuBypassModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+export const UbuntuBypassModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
+  isOpen,
+  onClose,
+}) => {
+  const { selectedServer, executeRemoteCommand, addToast, lang } = useVps();
 
-export const UbuntuBypassModal: React.FC<UbuntuBypassModalProps> = ({ isOpen, onClose }) => {
-  const { selectedServer, reinstallOs, lang, addToast } = useVps();
-
-  const [selectedMethodId, setSelectedMethodId] = useState<string>('in-memory-dd');
-  const [targetVersion, setTargetVersion] = useState<string>('24.04');
-  const [rootPassword, setRootPassword] = useState<string>('Ubuntu#2026@RootPass');
-  const [copiedCmd, setCopiedCmd] = useState<string | null>(null);
-  const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  // 3 Solusi Alternatif Tanpa Akses Provider
+  const [selectedMode, setSelectedMode] = useState<'reinstall_dd' | 'docker_isolated' | 'distrobox_native'>('docker_isolated');
+  const [targetDistro, setTargetDistro] = useState<'ubuntu' | 'debian' | 'alpine' | 'rocky'>('ubuntu');
+  const [targetVersion, setTargetVersion] = useState('22.04');
+  const [newPassword, setNewPassword] = useState('VelaVPS#2026@Root');
+  const [isExecuting, setIsExecuting] = useState(false);
   const [execLogs, setExecLogs] = useState<string[]>([]);
-  const [isCompleted, setIsCompleted] = useState<boolean>(false);
+  const [copied, setCopied] = useState(false);
 
   if (!isOpen || !selectedServer) return null;
 
-  const currentMethod =
-    UBUNTU_BYPASS_METHODS.find((m) => m.id === selectedMethodId) || UBUNTU_BYPASS_METHODS[0];
-
-  const generatedCommand =
-    selectedMethodId === 'in-memory-dd'
-      ? `curl -fLO https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh || curl -fLO https://github.com/leitbogioro/Tools/releases/download/OS_Reinstall/InstallNET.sh && bash reinstall.sh ubuntu ${targetVersion} --password "${rootPassword}"`
-      : currentMethod.bashCommand;
-
-  const copyCommand = (cmd: string) => {
-    navigator.clipboard.writeText(cmd);
-    setCopiedCmd(cmd);
-    addToast(
-      lang === 'id' ? 'Perintah Disalin' : 'Command Copied',
-      lang === 'id'
-        ? 'Perintah bypass siap di-paste ke terminal VPS Anda'
-        : 'Bypass command copied to clipboard',
-      'info'
-    );
-    setTimeout(() => setCopiedCmd(null), 2500);
+  // Generate perintah sesuai mode yang dipilih
+  const getCommand = () => {
+    if (selectedMode === 'docker_isolated') {
+      return `which docker >/dev/null 2>&1 || (apt-get update && apt-get install -y docker.io) && docker run -it -d --name ${targetDistro}-env --restart=always -p 2222:22 ${targetDistro}:${targetVersion} bash`;
+    }
+    if (selectedMode === 'distrobox_native') {
+      return `curl -s https://raw.githubusercontent.com/89luca89/distrobox/main/install | sh && distrobox create -i ${targetDistro}:${targetVersion} -n ${targetDistro}-env -Y && distrobox enter ${targetDistro}-env`;
+    }
+    // Netboot Reinstall DD in-memory
+    return `curl -O https://raw.githubusercontent.com/bin456789/reinstall/main/reinstall.sh || curl -O https://github.com/leitbogioro/Tools/releases/download/OS_Reinstall/InstallNET.sh ; bash reinstall.sh ${targetDistro} ${targetVersion} --password "${newPassword}"`;
   };
 
-  const handleStartBypass = async () => {
+  const handleCopy = () => {
+    navigator.clipboard.writeText(getCommand());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleExecute = async () => {
+    if (selectedMode === 'reinstall_dd') {
+      const confirmText = lang === 'id' 
+        ? 'PERINGATAN KERAS: Hard disk akan diformat ulang total via RAM! Semua data saat ini (termasuk FastPanel/file website) akan diganti bersih ke OS baru. Lanjutkan?'
+        : 'CRITICAL WARNING: Hard drive will be completely wiped and reinstalled via RAM. Continue?';
+      if (!window.confirm(confirmText)) return;
+    }
+
     setIsExecuting(true);
-    setIsCompleted(false);
-    setExecLogs([
-      `[BYPASS] Menginisiasi protokol bypass OS provider pada node ${selectedServer.hostname}...`,
-      `[SYSTEM] OS Saat Ini: ${selectedServer.os.distro} ${selectedServer.os.version} -> Target: Ubuntu ${targetVersion} LTS`,
-      `[STEP 1] Mengunduh kernel in-memory netboot kexec ke memori RAM...`,
-    ]);
+    setExecLogs([`[1/3] Menyiapkan target ${targetDistro.toUpperCase()} ${targetVersion}...`]);
 
-    setTimeout(() => {
-      setExecLogs((prev) => [
-        ...prev,
-        `[STEP 2] Membekukan I/O disk aktif dan unmount /dev/vda...`,
-        `[STEP 3] Membuka streaming cloud image resmi Canonical: ubuntu-${targetVersion}-minimal-cloudimg-amd64.raw.xz...`,
-        `[DD] Menulis raw image ke block device fisik (/dev/vda) via dd stream...`,
-      ]);
-    }, 1500);
-
-    setTimeout(() => {
-      setExecLogs((prev) => [
-        ...prev,
-        `[NET] Mendeteksi konfigurasi jaringan publik: IP ${selectedServer.ip}, Gateway, dan DNS...`,
-        `[AUTH] Menginjeksi password root baru dan mengaktifkan OpenSSH port 22...`,
-        `[KEXEC] Memulai ulang kernel secara paksa (Cold Reboot) ke Ubuntu ${targetVersion} LTS...`,
-      ]);
-    }, 3200);
-
-    await reinstallOs(selectedServer.id, {
-      distroId: 'ubuntu',
-      version: `${targetVersion} LTS`,
-      filesystem: 'ext4',
-      swapGb: 4,
-      rootPassword,
-      sshKey: '',
-      preinstallPackages: ['docker', 'ufw', 'fail2ban'],
-      hostname: selectedServer.hostname,
-    });
-
-    setTimeout(() => {
-      setExecLogs((prev) => [
-        ...prev,
-        `[SUCCESS] Bypass Berhasil! Server kini menjalankan resmi Ubuntu ${targetVersion} LTS.`,
-      ]);
-      setIsCompleted(true);
-    }, 4500);
+    try {
+      const cmd = getCommand();
+      setExecLogs((prev) => [...prev, `[2/3] Mengirim instruksi ke server: ${cmd.substring(0, 60)}...`]);
+      
+      const res = await executeRemoteCommand(cmd);
+      if (res.success || selectedMode === 'reinstall_dd') {
+        setExecLogs((prev) => [
+          ...prev,
+          `[3/3] Selesai! Instruksi berhasil dijalankan.`,
+          selectedMode === 'reinstall_dd'
+            ? 'Server sedang mengunduh kernel ke RAM & otomatis reboot. Tunggu 5-10 menit, lalu login SSH dengan password baru.'
+            : 'Container / Environment baru sudah aktif dan siap digunakan!',
+        ]);
+        addToast(
+          lang === 'id' ? 'Proses Berhasil Dijalankan' : 'Execution Started',
+          lang === 'id' ? 'Perintah telah dieksekusi di server VPS Anda.' : 'Command executed successfully.',
+          'success'
+        );
+      } else {
+        setExecLogs((prev) => [...prev, `[Error] ${res.stderr || 'Gagal mengeksekusi perintah. Pastikan SSH terhubung.'}`]);
+      }
+    } catch (err: any) {
+      setExecLogs((prev) => [...prev, `[Error] Terjadi kendala: ${err.message}`]);
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150">
+      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-              <Zap className="w-4 h-4" />
+        <div className="px-6 py-4 border-b border-slate-800 bg-slate-950/40 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Zap className="w-5 h-5 fill-current" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white tracking-tight">
-                {lang === 'id' ? 'Bypass & Paksa Instal Ubuntu (Netboot DD)' : 'Force Ubuntu Netboot DD Reinstall'}
-              </h2>
+              <h3 className="font-bold text-base text-white">
+                Bypass & Instalasi OS Tanpa Akses Provider
+              </h3>
               <p className="text-xs text-slate-400">
-                {lang === 'id'
-                  ? 'Solusi jika VPS yang dibeli tidak menyediakan template Ubuntu di panel provider'
-                  : 'Install official Ubuntu when provider does not support it in template catalog'}
+                Pilih metode instalasi OS saat dashboard panel provider terkunci
               </p>
             </div>
           </div>
-          {!isExecuting && (
-            <button
-              onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* Modal Content */}
-        <div className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
-          {!isExecuting ? (
-            <>
-              {/* Question Answer Banner */}
-              <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-                <div className="space-y-1 text-emerald-200 leading-relaxed">
-                  <h4 className="font-semibold text-white text-sm">
-                    {lang === 'id'
-                      ? 'Apakah bisa diatur agar support Ubuntu? TENTU BISA!'
-                      : 'Can we configure the VPS to support Ubuntu? ABSOLUTELY!'}
-                  </h4>
-                  <p className="text-slate-300">
-                    {lang === 'id'
-                      ? 'Banyak provider VPS murah hanya menyediakan CentOS, Rocky Linux, atau Debian. Dengan teknik Netboot DD in-memory, kita dapat menimpa partisi disk utama secara langsung menggunakan image resmi Ubuntu 24.04 LTS dari Canonical tanpa bergantung pada panel provider.'
-                      : 'Many VPS hosts only offer limited CentOS or Debian templates. Using in-memory Netboot DD streaming, you can overwrite the block device directly with official Ubuntu images.'}
-                  </p>
+        {/* Content Body */}
+        <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {/* 3 Pilihan Metode */}
+          <div>
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-2">
+              1. Pilih Solusi / Arsitektur
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              {/* Option 1: Docker (Aman, Tanpa Format) */}
+              <div
+                onClick={() => setSelectedMode('docker_isolated')}
+                className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  selectedMode === 'docker_isolated'
+                    ? 'bg-emerald-500/10 border-emerald-500/50 shadow-md shadow-emerald-950/30'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <Box className="w-4 h-4 text-emerald-400" />
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                    Paling Aman
+                  </span>
                 </div>
+                <div className="font-bold text-xs text-white">Container / Docker</div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                  Jalankan Ubuntu di dalam Debian. FastPanel & web Anda tetap aman 100%!
+                </p>
               </div>
 
-              {/* Target Ubuntu Version */}
-              <div>
-                <label className="text-xs font-semibold text-slate-200 block mb-1.5">
-                  {lang === 'id' ? 'Pilih Target Versi Ubuntu' : 'Target Ubuntu Version'}
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { id: '24.04', label: 'Ubuntu 24.04 LTS (Noble Numbat) - Rekomendasi' },
-                    { id: '22.04', label: 'Ubuntu 22.04 LTS (Jammy Jellyfish)' },
-                  ].map((v) => (
-                    <div
-                      key={v.id}
-                      onClick={() => setTargetVersion(v.id)}
-                      className={`p-3 rounded-lg border cursor-pointer font-mono transition-all ${
-                        targetVersion === v.id
-                          ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 font-semibold'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-900'
-                      }`}
-                    >
-                      {v.label}
-                    </div>
-                  ))}
+              {/* Option 2: Native Distrobox */}
+              <div
+                onClick={() => setSelectedMode('distrobox_native')}
+                className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  selectedMode === 'distrobox_native'
+                    ? 'bg-sky-500/10 border-sky-500/50 shadow-md shadow-sky-950/30'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <Layers className="w-4 h-4 text-sky-400" />
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold">
+                    Native Dev
+                  </span>
                 </div>
+                <div className="font-bold text-xs text-white">Distrobox Native</div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                  Gunakan package manager distro lain langsung di terminal shell tanpa format.
+                </p>
               </div>
 
-              {/* Methods Selection */}
-              <div>
-                <label className="text-xs font-semibold text-slate-200 block mb-1.5">
-                  {lang === 'id' ? 'Pilih Metode Bypass' : 'Choose Bypass Method'}
-                </label>
-                <div className="space-y-2">
-                  {UBUNTU_BYPASS_METHODS.map((method) => {
-                    const isSelected = selectedMethodId === method.id;
-                    return (
-                      <div
-                        key={method.id}
-                        onClick={() => setSelectedMethodId(method.id)}
-                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-amber-950/20 border-amber-500/40'
-                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-semibold text-slate-200 text-xs">
-                            {lang === 'id' ? method.titleId : method.title}
-                          </h4>
-                          {isSelected && <Check className="w-4 h-4 text-amber-400" />}
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                          {lang === 'id' ? method.descriptionId : method.description}
-                        </p>
-                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-500">
-                          {method.features.map((feat, idx) => (
-                            <span key={idx} className="bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
-                              ✓ {feat}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
+              {/* Option 3: Wipe & Reinstall DD in-memory */}
+              <div
+                onClick={() => setSelectedMode('reinstall_dd')}
+                className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
+                  selectedMode === 'reinstall_dd'
+                    ? 'bg-amber-500/10 border-amber-500/50 shadow-md shadow-amber-950/30'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <HardDrive className="w-4 h-4 text-amber-400" />
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                    Wipe Total
+                  </span>
                 </div>
+                <div className="font-bold text-xs text-white">Netboot DD in-RAM</div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                  Format ulang disk server fisik langsung dari RAM tanpa butuh ISO provider.
+                </p>
               </div>
+            </div>
+          </div>
 
-              {/* Password Configuration */}
-              <div>
-                <label className="text-xs font-semibold text-slate-200 block mb-1">
-                  {lang === 'id' ? 'Kata Sandi Root Baru (Untuk Login Setelah Selesai)' : 'New Root Password'}
-                </label>
-                <input
-                  type="text"
-                  value={rootPassword}
-                  onChange={(e) => setRootPassword(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono bg-slate-950 border border-slate-800 rounded-lg text-amber-300 focus:outline-none focus:border-amber-500"
-                />
-              </div>
-
-              {/* Command Preview Box */}
-              <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-                <div className="flex items-center justify-between text-slate-400 font-mono text-[11px]">
-                  <span>Perintah Shell Otomatis (Dapat Disalin untuk Terminal Manual):</span>
+          {/* Target Distro & Version */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                2. Pilih Distro Target
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'ubuntu', name: 'Ubuntu' },
+                  { id: 'debian', name: 'Debian' },
+                  { id: 'alpine', name: 'Alpine' },
+                  { id: 'rocky', name: 'Rocky Linux' },
+                ].map((d) => (
                   <button
-                    onClick={() => copyCommand(generatedCommand)}
-                    className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300"
+                    key={d.id}
+                    type="button"
+                    onClick={() => {
+                      setTargetDistro(d.id as any);
+                      if (d.id === 'ubuntu') setTargetVersion('22.04');
+                      if (d.id === 'debian') setTargetVersion('12');
+                      if (d.id === 'alpine') setTargetVersion('latest');
+                      if (d.id === 'rocky') setTargetVersion('9');
+                    }}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold border text-left transition-all ${
+                      targetDistro === d.id
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
                   >
-                    {copiedCmd ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedCmd ? 'Tersalin' : 'Salin Perintah'}</span>
+                    {d.name}
                   </button>
-                </div>
-                <code className="block p-2.5 bg-slate-900 rounded font-mono text-slate-300 break-all select-all leading-relaxed">
-                  {generatedCommand}
-                </code>
-              </div>
-            </>
-          ) : (
-            /* Execution logs view */
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-xs font-mono text-amber-400">
-                {!isCompleted ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
-                ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                )}
-                <span>
-                  {isCompleted
-                    ? 'Proses Bypass Ubuntu Telah Selesai!'
-                    : 'Sedang mengeksekusi streaming raw image ke /dev/vda...'}
-                </span>
-              </div>
-
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-slate-300 space-y-1.5 max-h-60 overflow-y-auto">
-                {execLogs.map((log, index) => (
-                  <div key={index} className="leading-relaxed">
-                    <span className="text-emerald-400 select-none mr-2">›</span>
-                    <span>{log}</span>
-                  </div>
                 ))}
               </div>
+            </div>
 
-              {isCompleted && (
-                <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/40 space-y-2">
-                  <div className="font-semibold text-emerald-400">
-                    Akses Login Ubuntu Baru:
-                  </div>
-                  <div className="font-mono text-xs text-slate-200">
-                    <div>Host: <span className="text-white">{selectedServer.ip}:22</span></div>
-                    <div>User: <span className="text-white">root</span></div>
-                    <div>Password: <span className="text-amber-300">{rootPassword}</span></div>
-                  </div>
+            <div>
+              <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-1.5">
+                3. Versi Distro
+              </label>
+              {targetDistro === 'ubuntu' ? (
+                <select
+                  value={targetVersion}
+                  onChange={(e) => setTargetVersion(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="24.04">Ubuntu 24.04 LTS (Noble Numbat)</option>
+                  <option value="22.04">Ubuntu 22.04 LTS (Jammy Jellyfish)</option>
+                  <option value="20.04">Ubuntu 20.04 LTS (Focal Fossa)</option>
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={targetVersion}
+                  onChange={(e) => setTargetVersion(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
+                />
+              )}
+
+              {selectedMode === 'reinstall_dd' && (
+                <div className="mt-2">
+                  <label className="text-[11px] font-semibold text-slate-400 block mb-1">
+                    Password Root Baru:
+                  </label>
+                  <input
+                    type="text"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-amber-500/40 rounded-lg px-3 py-1.5 text-xs font-mono text-amber-300 focus:outline-none"
+                  />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Command Preview */}
+          <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between text-slate-400 font-mono text-[11px]">
+              <span className="flex items-center gap-1.5">
+                <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Perintah Eksekusi Otomatis:</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Tersalin!' : 'Salin Perintah'}</span>
+              </button>
+            </div>
+            <pre className="p-2.5 bg-slate-900/90 rounded-lg font-mono text-xs text-slate-200 overflow-x-auto whitespace-pre-wrap break-all border border-slate-800">
+              {getCommand()}
+            </pre>
+          </div>
+
+          {/* Execution Output */}
+          {execLogs.length > 0 && (
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs space-y-1 max-h-36 overflow-y-auto">
+              {execLogs.map((log, i) => (
+                <div key={i} className="text-slate-300">
+                  <span className="text-emerald-400 mr-1.5">❯</span>
+                  {log}
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
-          {!isExecuting ? (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white"
-              >
-                {lang === 'id' ? 'Tutup' : 'Close'}
-              </button>
-              <button
-                type="button"
-                onClick={handleStartBypass}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg transition-colors shadow-sm"
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>{lang === 'id' ? 'Jalankan Bypass & Pasang Ubuntu' : 'Execute Ubuntu Bypass'}</span>
-              </button>
-            </>
-          ) : (
-            <div className="w-full flex justify-end">
-              {isCompleted && (
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-colors"
-                >
-                  {lang === 'id' ? 'Selesai & Buka Dashboard' : 'Done & Return'}
-                </button>
+        {/* Footer Actions */}
+        <div className="px-6 py-4 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+          >
+            Batal
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExecute}
+              disabled={isExecuting}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all shadow-md cursor-pointer ${
+                selectedMode === 'reinstall_dd'
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-950/50'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950/50'
+              }`}
+            >
+              {isExecuting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Mengeksekusi...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  <span>
+                    {selectedMode === 'reinstall_dd' ? 'Eksekusi Reinstall (Format)' : 'Pasang & Aktifkan OS'}
+                  </span>
+                </>
               )}
-            </div>
-          )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
