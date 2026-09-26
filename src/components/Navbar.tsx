@@ -17,8 +17,7 @@ import {
   Zap,
   ChevronRight,
   Globe,
-  Radio,
-  ExternalLink,
+  Box,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -26,7 +25,6 @@ export const Navbar: React.FC = () => {
     selectedServer,
     activeTab,
     setActiveTab,
-    authSession,
     logout,
     lang,
     setLang,
@@ -36,13 +34,14 @@ export const Navbar: React.FC = () => {
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // 5 Menu Utama Esensial & Modern
+  // 6 Menu Inti & Ikonik
   const primaryNavItems = [
     { id: 'overview', labelId: 'Overview', labelEn: 'Overview', icon: Activity, descId: 'Kesehatan Node & Telemetri' },
     { id: 'terminal', labelId: 'Terminal SSH', labelEn: 'Terminal', icon: Terminal, descId: 'Console root interaktif' },
+    { id: 'docker', labelId: 'Docker (OS)', labelEn: 'Docker (OS)', icon: Box, descId: 'Isolated Ubuntu / Container' },
     { id: 'panels', labelId: 'Control Panel', labelEn: 'Panels', icon: Layers, descId: 'aaPanel / FastPanel' },
     { id: 'domains', labelId: 'Domain & SSL', labelEn: 'Domains', icon: Globe, descId: 'Cloudflare & sertifikat' },
-    { id: 'config', labelId: 'Security & Port', labelEn: 'Security', icon: Shield, descId: 'Firewall UFW & port' },
+    { id: 'config', labelId: 'Keamanan & Port', labelEn: 'Security', icon: Shield, descId: 'Firewall UFW & port' },
   ];
 
   const handleNavClick = (tabId: string) => {
@@ -193,7 +192,7 @@ export const Navbar: React.FC = () => {
                       </div>
                       <div>
                         <div className="font-bold">{lang === 'id' ? item.labelId : item.labelEn}</div>
-                        <div className={`text-[10px] ${isActive ? 'text-slate-900/80' : 'text-slate-400'}`}>{item.descId}</div>
+                        <div className={`text-[10px] ${isActive ? 'text-slate-950/80' : 'text-slate-400'}`}>{item.descId}</div>
                       </div>
                     </div>
                     <ChevronRight className={`w-4 h-4 ${isActive ? 'text-slate-950' : 'text-slate-600'}`} />

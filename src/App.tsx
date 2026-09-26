@@ -15,6 +15,7 @@ import { ResourceMonitor } from './components/ResourceMonitor';
 import { BackupsManager } from './components/BackupsManager';
 import { ControlPanelInstaller } from './components/ControlPanelInstaller';
 import { DomainManager } from './components/DomainManager';
+import { DockerManager } from './components/DockerManager';
 import { UbuntuBypassModal } from './components/UbuntuBypassModal';
 import { ReinstallOsModal } from './components/ReinstallOsModal';
 import { AddServerModal } from './components/AddServerModal';
@@ -33,7 +34,7 @@ import {
   Shield,
   Zap,
   RefreshCcw,
-  Sparkles,
+  Box,
   Cpu,
   HardDrive,
   CheckCircle2,
@@ -71,11 +72,12 @@ const DashboardContent: React.FC = () => {
     );
   }
 
-  // 5 Tab Inti yang Paling Sering Digunakan
+  // 6 Tab Paling Relevan Termasuk Docker Container
   const essentialTabs = [
     { id: 'overview', label: 'Ringkasan Node', icon: Activity, badge: 'Live' },
     { id: 'terminal', label: 'Web Terminal SSH', icon: Terminal, badge: 'Root' },
-    { id: 'panels', label: 'Hosting & Web Control', icon: Layers, badge: 'aaPanel / FastPanel' },
+    { id: 'docker', label: 'Container Docker (OS)', icon: Box, badge: 'Isolated' },
+    { id: 'panels', label: 'Control Panel', icon: Layers, badge: 'aaPanel/FastPanel' },
     { id: 'domains', label: 'Domain & SSL', icon: Globe, badge: 'Cloudflare' },
     { id: 'config', label: 'Keamanan & Port', icon: Shield, badge: 'UFW' },
   ];
@@ -136,6 +138,7 @@ const DashboardContent: React.FC = () => {
         <div className="transition-all duration-150">
           {activeTab === 'overview' && <ServerOverview />}
           {activeTab === 'terminal' && <WebTerminal />}
+          {activeTab === 'docker' && <DockerManager />}
           {activeTab === 'panels' && <ControlPanelInstaller />}
           {activeTab === 'domains' && <DomainManager />}
           {activeTab === 'config' && <ServerConfigHub />}
