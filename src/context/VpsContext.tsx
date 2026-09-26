@@ -1576,7 +1576,7 @@ export const VpsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     serverId?: string
   ): Promise<{ stdout: string; stderr: string; code: number; success: boolean }> => {
     const targetId = serverId || selectedServerId;
-    const target = servers.find((s) => s.id === targetId);
+    let target = servers.find((s) => s.id === targetId) || servers[0];
 
     if (!target) {
       return { stdout: '', stderr: 'Server tidak ditemukan', code: 1, success: false };

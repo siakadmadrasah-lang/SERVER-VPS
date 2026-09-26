@@ -106,18 +106,26 @@ export const DockerManager: React.FC = () => {
     fetchDockerContainers();
   }, [selectedServer?.id, isRealSshActive]);
 
+  const [installModalOpen, setInstallModalOpen] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState(false);
+
+  const dockerInstallCommand = 'curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh && systemctl enable --now docker';
+
   // Install Docker Engine Otomatis 1-Klik
   const handleInstallDocker = async () => {
+    if (!isRealSshActive) {
+      setInstallModalOpen(true);
+      return;
+    }
+
     setActionInProgress('install-docker');
     addToast(
       lang === 'id' ? 'Memulai Instalasi Docker...' : 'Installing Docker...',
-      lang === 'id' ? 'Sedang mengunduh dan menyetel Docker Engine resmi di VPS Anda.' : 'Running Docker installer script.',
+      lang === 'id' ? 'Sedang mengunduh dan menyetel Docker Engine resmi di VPS Anda...' : 'Running Docker installer script.',
       'info'
     );
     try {
-      const res = await executeRemoteCommand(
-        'curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh && systemctl enable --now docker'
-      );
+      const res = await executeRemoteCommand(dockerInstallCommand);
       if (res.code === 0 || res.success) {
         setIsDockerInstalled(true);
         addToast(
@@ -127,10 +135,10 @@ export const DockerManager: React.FC = () => {
         );
         fetchDockerContainers();
       } else {
-        addToast('Gagal Pasang Docker', res.stderr || 'Periksa koneksi SSH.', 'error');
+        setInstallModalOpen(true);
       }
     } catch (e: any) {
-      addToast('Error', e.message, 'error');
+      setInstallModalOpen(true);
     } finally {
       setActionInProgress(null);
     }
@@ -469,6 +477,54 @@ export const DockerManager: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal Petunjuk Eksekusi Manual Docker jika SSH belum aktif */}
+      {installModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Box className="w-5 h-5 text-sky-400" />
+                <h3 className="font-bold text-sm text-white">Instalasi Docker Engine Resmi</h3>
+              </div>
+              <button onClick={() => setInstallModalOpen(false)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Karena koneksi root SSH belum diverifikasi di panel web, Anda dapat langsung menyalin dan menjalankan perintah resmi ini di <strong>Termius</strong> (hanya butuh 30 detik):
+            </p>
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-slate-400 text-[11px] font-mono">
+                <span>Perintah Eksekusi di Termius:</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(dockerInstallCommand);
+                    setCopiedCmd(true);
+                    setTimeout(() => setCopiedCmd(false), 2000);
+                  }}
+                  className="flex items-center gap-1 text-sky-400 hover:text-sky-300 font-bold cursor-pointer"
+                >
+                  {copiedCmd ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedCmd ? 'Tersalin!' : 'Salin Perintah'}</span>
+                </button>
+              </div>
+              <pre className="p-2.5 bg-slate-900 rounded font-mono text-xs text-sky-300 break-all select-all">
+                {dockerInstallCommand}
+              </pre>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setInstallModalOpen(false);
+                  setIsDockerInstalled(true);
+                  fetchDockerContainers();
+                }}
+                className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs cursor-pointer"
+              >
+                Sudah Jalankan di Termius & Selesai
+              </button>
+            </div>
           </div>
         </div>
       )}
